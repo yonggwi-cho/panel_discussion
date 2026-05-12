@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理画面 — アンケートコントロール</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: #0f172a;
+      min-height: 100vh;
+      color: #e2e8f0;
+      padding: 24px;
+    }
+    h1 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #a78bfa;
+      margin-bottom: 4px;
+    }
+    .subtitle { font-size: 0.82rem; color: #64748b; margin-bottom: 28px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    .card h2 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    /* 現在の状態 */
+    #current-section {
+      font-size: 0.75rem;
+      color: #a78bfa;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    #current-question {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+    #current-status {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .status-open { background: #22c55e; color: #fff; }
+    .status-closed { background: #475569; color: #cbd5e1; }
+    .status-none { background: #334155; color: #94a3b8; }
+
+    #vote-summary {
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .result-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+    }
+    .result-label { flex: 1; color: #cbd5e1; }
+    .result-bar-wrap {
+      width: 120px;
+      height: 10px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .result-bar { height: 100%; border-radius: 5px; transition: width 0.5s ease; }
+    .result-count { width: 40px; text-align: right; font-weight: 700; color: #94a3b8; font-size: 0.8rem; }
+
+    /* コントロール */
+    .poll-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .poll-item {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .poll-item:hover { border-color: #a78bfa; background: rgba(167,139,250,0.08); }
+    .poll-item.active { border-color: #a78bfa; background: rgba(167,139,250,0.12); }
+    .poll-item-section { font-size: 0.7rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px; }
+    .poll-item-q { font-size: 0.88rem; color: #e2e8f0; font-weight: 600; line-height: 1.4; }
+    .poll-item-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    button:active { transform: scale(0.97); }
+
+    .btn-open { background: #22c55e; color: #fff; }
+    .btn-open:hover { background: #16a34a; }
+    .btn-close { background: #ef4444; color: #fff; }
+    .btn-close:hover { background: #dc2626; }
+    .btn-reset { background: #475569; color: #cbd5e1; }
+    .btn-reset:hover { background: #334155; }
+    .btn-sm { padding: 6px 12px; font-size: 0.78rem; }
+
+    /* リンクカード */
+    .link-card {
+      background: rgba(167,139,250,0.08);
+      border: 1px solid rgba(167,139,250,0.2);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+    .link-card h3 { font-size: 0.78rem; color: #a78bfa; font-weight: 700; margin-bottom: 6px; }
+    .link-card a {
+      font-size: 0.88rem;
+      color: #60a5fa;
+      text-decoration: none;
+      word-break: break-all;
+    }
+    .link-card a:hover { text-decoration: underline; }
+
+    #qr-admin {
+      text-align: center;
+      margin-top: 12px;
+    }
+    #qr-admin img { width: 140px; height: 140px; border-radius: 8px; }
+    #qr-admin p { font-size: 0.75rem; color: #64748b; margin-top: 6px; }
+
+    .log-box {
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.75rem;
+      color: #64748b;
+      max-height: 120px;
+      overflow-y: auto;
+      margin-top: 12px;
+      font-family: monospace;
+    }
+    .log-box p { margin-bottom: 2px; }
+    .log-box .log-ok { color: #4ade80; }
+    .log-box .log-info { color: #94a3b8; }
+
+    #conn-indicator {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    #conn-indicator.ok { background: #22c55e; }
+  </style>
+</head>
+<body>
+  <h1>🎛️ アンケート管理画面</h1>
+  <p class="subtitle">
+    <span id="conn-indicator"></span>
+    パネルディスカッション「今の時代を、君たちはどう生きるか」
+  </p>
+
+  <div class="grid">
+    <!-- 現在の状態 -->
+    <div class="card">
+      <h2>現在の状態</h2>
+      <div id="current-section">—</div>
+      <div id="current-question">アンケート未選択</div>
+      <div id="current-status" class="status-none">待機中</div>
+
+      <div id="vote-summary"></div>
+
+      <div style="margin-top: 16px; display: flex; gap: 8px;">
+        <button class="btn-close btn-sm" onclick="closeVote()" id="close-btn" disabled>⏸ 受付終了</button>
+        <button class="btn-reset btn-sm" onclick="resetCurrentVote()" id="reset-btn" disabled>🔄 票をリセット</button>
+      </div>
+
+      <div class="log-box" id="log"></div>
+    </div>
+
+    <!-- 投票選択 -->
+    <div class="card" style="overflow-y:auto;max-height:560px">
+      <h2>アンケートを選択・開始</h2>
+      <div class="poll-list" id="poll-list"></div>
+    </div>
+
+    <!-- リンク・QR -->
+    <div class="card">
+      <h2>各画面へのリンク</h2>
+      <div class="link-card">
+        <h3>📱 投票画面（参加者）</h3>
+        <a id="vote-link" href="/vote.html" target="_blank">/vote.html</a>
+      </div>
+      <div class="link-card">
+        <h3>🖥️ 表示画面（プロジェクター）</h3>
+        <a id="display-link" href="/display.html" target="_blank">/display.html</a>
+      </div>
+      <div id="qr-admin">
+        <img id="qr-img" src="" alt="" style="display:none">
+        <p id="qr-caption"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const COLORS = ['#a78bfa', '#60a5fa', '#34d399', '#fb923c', '#f472b6'];
+
+    let ws;
+    let state = null;
+    let polls = [];
+
+    function log(msg, type = 'info') {
+      const box = document.getElementById('log');
+      const p = document.createElement('p');
+      p.className = 'log-' + type;
+      p.textContent = new Date().toLocaleTimeString('ja-JP') + ' ' + msg;
+      box.prepend(p);
+      if (box.children.length > 30) box.lastChild.remove();
+    }
+
+    async function fetchPolls() {
+      const res = await fetch('/api/polls');
+      polls = await res.json();
+      renderPollList();
+    }
+
+    function renderPollList() {
+      const list = document.getElementById('poll-list');
+      list.innerHTML = '';
+      polls.forEach(poll => {
+        const div = document.createElement('div');
+        div.className = 'poll-item' + (state?.poll?.id === poll.id ? ' active' : '');
+        div.id = `poll-item-${poll.id}`;
+        div.innerHTML = `
+          <div class="poll-item-section">${poll.section}</div>
+          <div class="poll-item-q">Q${poll.id}. ${poll.question}</div>
+          <div class="poll-item-actions">
+            <button class="btn-open btn-sm" onclick="openVote(${poll.id})">▶ 開始</button>
+            <button class="btn-reset btn-sm" onclick="resetVote(${poll.id})">🔄 リセット</button>
+          </div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    async function openVote(pollId) {
+      await fetch('/api/poll/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pollId }),
+      });
+      log(`Q${pollId} を開始しました`, 'ok');
+    }
+
+    async function closeVote() {
+      await fetch('/api/poll/close', { method: 'POST' });
+      log('受付を終了しました', 'info');
+    }
+
+    async function resetVote(pollId) {
+      if (!confirm(`Q${pollId} の票をリセットしますか？`)) return;
+      await fetch('/api/poll/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pollId }),
+      });
+      log(`Q${pollId} をリセットしました`, 'info');
+    }
+
+    function resetCurrentVote() {
+      if (state?.poll) resetVote(state.poll.id);
+    }
+
+    function handleState(msg) {
+      state = msg;
+
+      const sectionEl = document.getElementById('current-section');
+      const questionEl = document.getElementById('current-question');
+      const statusEl = document.getElementById('current-status');
+      const closeBtn = document.getElementById('close-btn');
+      const resetBtn = document.getElementById('reset-btn');
+
+      if (!msg.poll) {
+        sectionEl.textContent = '—';
+        questionEl.textContent = 'アンケート未選択';
+        statusEl.textContent = '待機中';
+        statusEl.className = 'status-none';
+        closeBtn.disabled = true;
+        resetBtn.disabled = true;
+        document.getElementById('vote-summary').innerHTML = '';
+      } else {
+        sectionEl.textContent = msg.poll.section;
+        questionEl.textContent = msg.poll.question;
+        statusEl.textContent = msg.isOpen ? '受付中' : '受付終了';
+        statusEl.className = msg.isOpen ? 'status-open' : 'status-closed';
+        closeBtn.disabled = !msg.isOpen;
+        resetBtn.disabled = false;
+
+        renderSummary(msg.poll.options, msg.votes, msg.total);
+      }
+
+      renderPollList();
+    }
+
+    function renderSummary(options, votes, total) {
+      const container = document.getElementById('vote-summary');
+      container.innerHTML = `<div style="font-size:0.8rem;color:#64748b;margin-bottom:8px;margin-top:12px">回答数: <strong style="color:#e2e8f0">${total}</strong> 票</div>`;
+      options.forEach((opt, i) => {
+        const count = votes[i] || 0;
+        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+        const row = document.createElement('div');
+        row.className = 'result-row';
+        row.innerHTML = `
+          <div class="result-label">${opt}</div>
+          <div class="result-bar-wrap">
+            <div class="result-bar" style="width:${pct}%;background:${COLORS[i % COLORS.length]}"></div>
+          </div>
+          <div class="result-count">${count}</div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function connect() {
+      ws = new WebSocket(`ws://${location.host}`);
+      ws.onopen = () => {
+        document.getElementById('conn-indicator').classList.add('ok');
+        log('WebSocket 接続', 'ok');
+      };
+      ws.onclose = () => {
+        document.getElementById('conn-indicator').classList.remove('ok');
+        setTimeout(connect, 2000);
+      };
+      ws.onmessage = e => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'state') handleState(msg);
+      };
+    }
+
+    async function generateQR() {
+      const voteUrl = `${location.protocol}//${location.host}/vote.html`;
+      document.getElementById('vote-link').textContent = voteUrl;
+      document.getElementById('vote-link').href = voteUrl;
+      document.getElementById('display-link').href = `${location.protocol}//${location.host}/display.html`;
+      document.getElementById('display-link').textContent = `${location.protocol}//${location.host}/display.html`;
+
+      try {
+        const res = await fetch(`/api/qrcode?url=${encodeURIComponent(voteUrl)}`);
+        const data = await res.json();
+        const img = document.getElementById('qr-img');
+        img.src = data.qr;
+        img.style.display = 'block';
+        document.getElementById('qr-caption').textContent = '参加者用 投票QRコード';
+      } catch (e) {}
+    }
+
+    fetchPolls();
+    connect();
+    generateQR();
+  </script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>アンケート投票</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: #0f0c29;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      min-height: 100vh;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #a78bfa;
+    }
+    header p {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+
+    #status-bar {
+      width: 100%;
+      max-width: 480px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .badge-open { background: #22c55e; color: #fff; }
+    .badge-closed { background: #475569; color: #cbd5e1; }
+    .badge-wait { background: #f59e0b; color: #fff; }
+
+    #poll-card {
+      width: 100%;
+      max-width: 480px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 28px 20px;
+      backdrop-filter: blur(12px);
+    }
+
+    #section-label {
+      font-size: 0.72rem;
+      color: #a78bfa;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    #question {
+      font-size: 1.15rem;
+      font-weight: 700;
+      line-height: 1.6;
+      margin-bottom: 24px;
+      color: #f1f5f9;
+    }
+
+    .options-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .option-btn {
+      background: rgba(167,139,250,0.1);
+      border: 2px solid rgba(167,139,250,0.3);
+      border-radius: 14px;
+      padding: 16px 18px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+      width: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+    .option-btn:hover:not(:disabled) {
+      background: rgba(167,139,250,0.25);
+      border-color: #a78bfa;
+      transform: translateY(-1px);
+    }
+    .option-btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+    .option-btn.selected {
+      background: rgba(167,139,250,0.35);
+      border-color: #a78bfa;
+      color: #fff;
+    }
+    .option-btn.selected::after {
+      content: '✓';
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1.2rem;
+      color: #a78bfa;
+    }
+    .option-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    #message {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 0.95rem;
+      min-height: 40px;
+      color: #94a3b8;
+    }
+    #message.success { color: #4ade80; }
+    #message.error { color: #f87171; }
+
+    #waiting {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      padding: 40px 0;
+      color: #94a3b8;
+    }
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(167,139,250,0.2);
+      border-top-color: #a78bfa;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #connection-indicator {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+      transition: background 0.3s;
+    }
+    #connection-indicator.connected { background: #22c55e; }
+  </style>
+</head>
+<body>
+  <div id="connection-indicator"></div>
+
+  <header>
+    <h1>📊 リアルタイムアンケート</h1>
+    <p>今の時代を、君たちはどう生きるか</p>
+  </header>
+
+  <div id="status-bar">
+    <span id="status-badge" class="badge badge-wait">接続中…</span>
+  </div>
+
+  <div id="poll-card">
+    <div id="waiting">
+      <div class="spinner"></div>
+      <p>アンケート開始をお待ちください</p>
+    </div>
+    <div id="poll-content" style="display:none">
+      <div id="section-label"></div>
+      <div id="question"></div>
+      <div class="options-list" id="options-list"></div>
+      <div id="message"></div>
+    </div>
+  </div>
+
+  <script>
+    const voterId = localStorage.getItem('voterId') || (() => {
+      const id = 'v_' + Math.random().toString(36).slice(2) + Date.now();
+      localStorage.setItem('voterId', id);
+      return id;
+    })();
+
+    let currentState = null;
+    let hasVoted = false;
+    let ws;
+
+    function connect() {
+      ws = new WebSocket(`ws://${location.host}`);
+
+      ws.onopen = () => {
+        document.getElementById('connection-indicator').classList.add('connected');
+      };
+
+      ws.onclose = () => {
+        document.getElementById('connection-indicator').classList.remove('connected');
+        setTimeout(connect, 2000);
+      };
+
+      ws.onmessage = e => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'state') handleState(msg);
+        if (msg.type === 'voted') handleVoted(msg);
+        if (msg.type === 'already_voted') handleAlreadyVoted();
+      };
+    }
+
+    function handleState(msg) {
+      const prevPollId = currentState?.poll?.id;
+      currentState = msg;
+
+      if (prevPollId !== msg.poll?.id) hasVoted = false;
+
+      const statusBadge = document.getElementById('status-badge');
+      const waiting = document.getElementById('waiting');
+      const pollContent = document.getElementById('poll-content');
+
+      if (!msg.poll || !msg.isOpen) {
+        statusBadge.textContent = msg.isOpen ? '開票中' : '待機中';
+        statusBadge.className = 'badge ' + (msg.isOpen ? 'badge-open' : 'badge-closed');
+        waiting.style.display = 'flex';
+        pollContent.style.display = 'none';
+        waiting.querySelector('p').textContent = msg.isOpen
+          ? 'アンケートを準備しています…'
+          : 'アンケート開始をお待ちください';
+        return;
+      }
+
+      statusBadge.textContent = '回答受付中';
+      statusBadge.className = 'badge badge-open';
+      waiting.style.display = 'none';
+      pollContent.style.display = 'block';
+
+      document.getElementById('section-label').textContent = msg.poll.section;
+      document.getElementById('question').textContent = msg.poll.question;
+
+      renderOptions(msg.poll.options);
+    }
+
+    function renderOptions(options) {
+      const list = document.getElementById('options-list');
+      list.innerHTML = '';
+      options.forEach((opt, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn' + (hasVoted ? ' disabled' : '');
+        btn.textContent = opt;
+        btn.disabled = hasVoted;
+        if (hasVoted) btn.classList.add('selected');
+        btn.onclick = () => castVote(i);
+        list.appendChild(btn);
+      });
+    }
+
+    function castVote(optionIndex) {
+      if (!currentState?.poll || !currentState.isOpen || hasVoted) return;
+      ws.send(JSON.stringify({
+        type: 'vote',
+        pollId: currentState.poll.id,
+        optionIndex,
+        voterId,
+      }));
+    }
+
+    function handleVoted(msg) {
+      hasVoted = true;
+      const btns = document.querySelectorAll('.option-btn');
+      btns.forEach((btn, i) => {
+        btn.disabled = true;
+        if (i === msg.optionIndex) btn.classList.add('selected');
+      });
+      const msgEl = document.getElementById('message');
+      msgEl.textContent = '✅ 回答を受け付けました！ありがとうございます。';
+      msgEl.className = 'success';
+    }
+
+    function handleAlreadyVoted() {
+      hasVoted = true;
+      const msgEl = document.getElementById('message');
+      msgEl.textContent = '⚠️ このアンケートはすでに回答済みです。';
+      msgEl.className = 'error';
+    }
+
+    connect();
+  </script>
+</body>
+</html>

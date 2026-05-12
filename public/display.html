@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>アンケート結果表示</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: #0a0a1a;
+      min-height: 100vh;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      background: rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    header h1 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #a78bfa;
+      letter-spacing: 0.04em;
+    }
+    header .meta {
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+    #live-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #64748b;
+    }
+    .dot.live { background: #22c55e; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+    }
+
+    #standby {
+      text-align: center;
+      color: #475569;
+    }
+    #standby h2 { font-size: 2.5rem; margin-bottom: 16px; }
+    #standby p { font-size: 1.1rem; }
+
+    #poll-display {
+      width: 100%;
+      max-width: 900px;
+    }
+
+    #section-label {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #a78bfa;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    #question-text {
+      font-size: clamp(1.3rem, 3vw, 2rem);
+      font-weight: 700;
+      line-height: 1.5;
+      color: #f1f5f9;
+      margin-bottom: 40px;
+      border-left: 5px solid #a78bfa;
+      padding-left: 20px;
+    }
+
+    #vote-count {
+      text-align: right;
+      font-size: 1rem;
+      color: #64748b;
+      margin-bottom: 24px;
+    }
+    #vote-count span { color: #e2e8f0; font-weight: 700; font-size: 1.3rem; }
+
+    #chart-container {
+      position: relative;
+      width: 100%;
+      max-height: 400px;
+    }
+
+    #bars-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .bar-label {
+      width: 200px;
+      flex-shrink: 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      text-align: right;
+    }
+    .bar-track {
+      flex: 1;
+      height: 48px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 10px;
+      transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      min-width: 0;
+      position: relative;
+    }
+    .bar-pct {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: rgba(255,255,255,0.9);
+    }
+    .bar-num {
+      width: 48px;
+      flex-shrink: 0;
+      text-align: left;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+
+    .status-closed {
+      margin-top: 32px;
+      text-align: center;
+      font-size: 1rem;
+      color: #475569;
+      font-weight: 600;
+    }
+
+    #qr-area {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #fff;
+      padding: 12px;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    #qr-area img { width: 120px; height: 120px; }
+    #qr-area p { font-size: 0.7rem; color: #1e293b; font-weight: 700; text-align: center; }
+
+    #connection-indicator {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      display: inline-block;
+    }
+    #connection-indicator.connected { background: #22c55e; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📊 パネルディスカッション「今の時代を、君たちはどう生きるか」</h1>
+    <div id="live-badge">
+      <div class="dot" id="live-dot"></div>
+      <span id="live-text">接続中</span>
+      <div id="connection-indicator"></div>
+    </div>
+  </header>
+
+  <main>
+    <div id="standby">
+      <h2>🎤</h2>
+      <p>アンケートが開始されると、ここに結果がリアルタイム表示されます</p>
+    </div>
+    <div id="poll-display" style="display:none">
+      <div id="section-label"></div>
+      <div id="question-text"></div>
+      <div id="vote-count">回答数: <span id="total-count">0</span> 票</div>
+      <div id="bars-container"></div>
+      <div id="status-closed" class="status-closed" style="display:none">
+        ⏸ 受付終了 — 最終結果
+      </div>
+    </div>
+  </main>
+
+  <div id="qr-area" style="display:none">
+    <img id="qr-img" src="" alt="QR Code">
+    <p>スマホで投票<br>↑ QRコードを読み取り</p>
+  </div>
+
+  <script>
+    const COLORS = ['#a78bfa', '#60a5fa', '#34d399', '#fb923c', '#f472b6'];
+
+    let ws;
+    let currentPollId = null;
+
+    function connect() {
+      ws = new WebSocket(`ws://${location.host}`);
+      ws.onopen = () => {
+        document.getElementById('connection-indicator').classList.add('connected');
+      };
+      ws.onclose = () => {
+        document.getElementById('connection-indicator').classList.remove('connected');
+        setTimeout(connect, 2000);
+      };
+      ws.onmessage = e => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'state') renderState(msg);
+      };
+    }
+
+    function renderState(msg) {
+      const liveDot = document.getElementById('live-dot');
+      const liveText = document.getElementById('live-text');
+      const standby = document.getElementById('standby');
+      const pollDisplay = document.getElementById('poll-display');
+      const statusClosed = document.getElementById('status-closed');
+
+      if (!msg.poll) {
+        liveDot.className = 'dot';
+        liveText.textContent = '待機中';
+        standby.style.display = 'block';
+        pollDisplay.style.display = 'none';
+        generateQR();
+        return;
+      }
+
+      standby.style.display = 'none';
+      pollDisplay.style.display = 'block';
+
+      if (msg.isOpen) {
+        liveDot.className = 'dot live';
+        liveText.textContent = 'LIVE';
+      } else {
+        liveDot.className = 'dot';
+        liveText.textContent = '結果';
+      }
+
+      statusClosed.style.display = msg.isOpen ? 'none' : 'block';
+
+      if (currentPollId !== msg.poll.id) {
+        currentPollId = msg.poll.id;
+        document.getElementById('section-label').textContent = msg.poll.section;
+        document.getElementById('question-text').textContent = msg.poll.question;
+        buildBars(msg.poll.options);
+      }
+
+      document.getElementById('total-count').textContent = msg.total;
+      updateBars(msg.votes, msg.total);
+      generateQR();
+    }
+
+    function buildBars(options) {
+      const container = document.getElementById('bars-container');
+      container.innerHTML = '';
+      options.forEach((opt, i) => {
+        const row = document.createElement('div');
+        row.className = 'bar-row';
+        row.innerHTML = `
+          <div class="bar-label">${opt}</div>
+          <div class="bar-track">
+            <div class="bar-fill" id="bar-fill-${i}" style="width:0%;background:${COLORS[i % COLORS.length]}">
+              <span class="bar-pct" id="bar-pct-${i}"></span>
+            </div>
+          </div>
+          <div class="bar-num" id="bar-num-${i}">0</div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function updateBars(votes, total) {
+      votes.forEach((count, i) => {
+        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+        const fill = document.getElementById(`bar-fill-${i}`);
+        const pctEl = document.getElementById(`bar-pct-${i}`);
+        const numEl = document.getElementById(`bar-num-${i}`);
+        if (fill) fill.style.width = pct + '%';
+        if (pctEl) pctEl.textContent = pct > 5 ? pct + '%' : '';
+        if (numEl) numEl.textContent = count;
+      });
+    }
+
+    let qrGenerated = false;
+    async function generateQR() {
+      if (qrGenerated) return;
+      qrGenerated = true;
+      const voteUrl = `${location.protocol}//${location.host}/vote.html`;
+      try {
+        const res = await fetch(`/api/qrcode?url=${encodeURIComponent(voteUrl)}`);
+        const data = await res.json();
+        const qrArea = document.getElementById('qr-area');
+        const qrImg = document.getElementById('qr-img');
+        qrImg.src = data.qr;
+        qrArea.style.display = 'flex';
+      } catch (e) {}
+    }
+
+    connect();
+  </script>
+</body>
+</html>
